@@ -6,7 +6,10 @@ from datetime import datetime
 import os
 from tabulate import tabulate
 
-def get_audit_logs(token, url="https://rcoder.sal.za.net/api/v2/audit", limit=0):
+FQDN="My URL"
+# Add audit-token.txt or manually in this script
+
+def get_audit_logs(token, url=f"https://{FQDN}/api/v2/audit", limit=0):
     """Fetch audit logs from the Coder API"""
     headers = {
         'Accept': 'application/json',
