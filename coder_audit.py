@@ -13,7 +13,9 @@ def get_token():
             return f.read().strip()
     return os.environ.get("CODER_TOKEN")
 
-CODER_URL = "https://rcoder.sal.za.net"
+FQDN="My URL"
+# Add your token to audit-token.txt or update here
+CODER_URL = f"https://{FQDN}"
 TOKEN = get_token()
 
 headers = {
