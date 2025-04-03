@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 # Creates two distinct tables, total login/connect between two dates and a connect_count per user
+# requirements: prettytable
 #
 import requests
 import json
@@ -20,7 +21,7 @@ def get_token():
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Count Coder connection events')
-    parser.add_argument('--url', default=os.environ.get("CODER_URL", "https://rcoder.sal.za.net"),
+    parser.add_argument('--url', default=os.environ.get("CODER_URL", "${FQDN}"),
                         help='Coder URL')
     parser.add_argument('--start', required=True, help='Start time (YYYY-MM-DD)')
     parser.add_argument('--end', required=True, help='End time (YYYY-MM-DD)')
