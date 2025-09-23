@@ -13,7 +13,15 @@ def get_token():
             return f.read().strip()
     return os.environ.get("CODER_TOKEN")
 
-FQDN="My URL"
+def get_fqdn():
+    if os.environ.get("CODER_URL"):
+      return os.environ.get("CODER_URL")
+    print("Use CODER_URL ENV to pass your FQDN")
+    return "FQDN"
+
+
+FQDN = get_fqdn()
+# FQDN="My URL"
 # Add your token to audit-token.txt or update here
 CODER_URL = f"https://{FQDN}"
 TOKEN = get_token()
