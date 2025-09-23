@@ -51,6 +51,17 @@ def get_workspaces():
         print(f"Error fetching workspaces: {response.status_code}")
         return []
 
+def get_templates():
+    """Fetch templates from Coder API"""
+    url = f"{CODER_URL}/api/v2/templates"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        # API returns a list directly, not an object with "templates" key
+        return response.json()
+    else:
+        print(f"Error fetching templates: {response.status_code}")
+        return []
+
 def format_date(date_str):
     """Format date string to a more readable format"""
     if not date_str or date_str == "0001-01-01T00:00:00Z":
@@ -81,9 +92,13 @@ def main():
     # Get data
     audit_logs = get_audit_logs()
     workspaces = get_workspaces()
+    templates = get_templates()
     
     # Create a dict to map workspace id to workspace info
     workspace_map = {ws['id']: ws for ws in workspaces}
+    
+    # Create a dict to map template id to template name
+    template_map = {tpl['id']: tpl['name'] for tpl in templates}
     
     # Prepare data for display
     table_data = []
@@ -93,6 +108,7 @@ def main():
             username = workspace['owner_name']
             workspace_name = workspace['name']
             status = workspace['latest_build']['status']
+            template_name = template_map.get(workspace['template_id'], 'Unknown')
             last_seen = format_date(workspace['owner'].get('last_seen_at', 'N/A') if 'owner' in workspace else workspace.get('last_used_at', 'N/A'))
             ttl = format_ttl(workspace.get('ttl_ms'))
             deadline = format_date(workspace['latest_build'].get('deadline', 'N/A'))
@@ -101,6 +117,7 @@ def main():
             table_data.append([
                 username,
                 workspace_name,
+                template_name,
                 status,
                 last_seen,
                 ttl,
@@ -112,7 +129,7 @@ def main():
     table_data.sort(key=lambda x: (x[0].lower(), x[1].lower()))
     
     # Display the table
-    headers = ["Username", "Workspace", "Status", "Last Seen", "TTL", "Deadline", "Max Deadline"]
+    headers = ["Username", "Workspace", "Template", "Status", "Last Seen", "TTL", "Deadline", "Max Deadline"]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 if __name__ == "__main__":
