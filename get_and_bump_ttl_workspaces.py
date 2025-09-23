@@ -21,12 +21,24 @@ def get_token():
     print("You must provide a CODER_TOKEN or audit-token.txt")
     sys.exit(1)
 
+def get_fqdn():
+    if os.environ.get("CODER_URL"):
+        return os.environ.get("CODER_URL")
+    print("Use CODER_URL ENV to pass your FQDN")
+    sys.exit(1)
+
+# Get configuration
+FQDN = get_fqdn()
+CODER_URL = f"https://{FQDN}"
+TOKEN = get_token()
+
+headers = {
+    'Accept': 'application/json',
+    'Coder-Session-Token': TOKEN
+}
+
 def get_audit_logs(token):
-    url = "https://rcoder.sal.za.net/api/v2/audit?limit=0"
-    headers = {
-        'Accept': 'application/json',
-        'Coder-Session-Token': token
-    }
+    url = f"{CODER_URL}/api/v2/audit?limit=0"
 
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
@@ -63,11 +75,7 @@ def format_time_remaining(remaining_seconds):
 
 def get_templates(token):
     """Fetch templates from Coder API"""
-    url = "https://rcoder.sal.za.net/api/v2/templates"
-    headers = {
-        'Accept': 'application/json',
-        'Coder-Session-Token': token
-    }
+    url = f"{CODER_URL}/api/v2/templates"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         # API returns a list directly, not an object with "templates" key
@@ -78,11 +86,7 @@ def get_templates(token):
 
 def get_workspace_details(token, workspace_id):
     """Get workspace details including template_id, ttl_ms, deadline, and status"""
-    url = f"https://rcoder.sal.za.net/api/v2/workspaces/{workspace_id}"
-    headers = {
-        'Accept': 'application/json',
-        'Coder-Session-Token': token
-    }
+    url = f"{CODER_URL}/api/v2/workspaces/{workspace_id}"
 
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -153,17 +157,14 @@ def extract_workspace_activity(token, logs, template_map):
     return list(workspace_latest.values())
 
 def update_workspace_ttl(token, workspace_id, ttl_ms):
-    url = f"https://rcoder.sal.za.net/api/v2/workspaces/{workspace_id}/ttl"
-    headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Coder-Session-Token': token
-    }
+    url = f"{CODER_URL}/api/v2/workspaces/{workspace_id}/ttl"
+    # Extend global headers with Content-Type for PUT request
+    put_headers = {**headers, 'Content-Type': 'application/json'}
     payload = {
         "ttl_ms": ttl_ms
     }
 
-    response = requests.put(url, headers=headers, data=json.dumps(payload))
+    response = requests.put(url, headers=put_headers, data=json.dumps(payload))
     if response.status_code in (200, 204):
         print(f"Successfully updated TTL for workspace {workspace_id} to {ttl_ms} ms.")
     else:
