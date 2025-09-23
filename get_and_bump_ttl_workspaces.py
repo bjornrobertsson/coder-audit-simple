@@ -6,8 +6,20 @@
 import json
 import requests
 import sys
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
 import pprint
+
+# Get the API token from file or environment variable
+def get_token():
+    if os.path.exists("audit-token.txt"):
+        with open("audit-token.txt", "r") as f:
+            return f.read().strip()
+    token = os.environ.get("CODER_TOKEN")
+    if token:
+        return token
+    print("You must provide a CODER_TOKEN or audit-token.txt")
+    sys.exit(1)
 
 def get_audit_logs(token):
     url = "https://rcoder.sal.za.net/api/v2/audit?limit=0"
@@ -27,7 +39,45 @@ def format_time(time_str):
     dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
-def get_workspace_ttl(token, workspace_id):
+def format_time_remaining(remaining_seconds):
+    """Format time remaining in human-readable format like '1d', '1h', '1h2m'"""
+    if remaining_seconds <= 0:
+        return None
+    
+    days = int(remaining_seconds // 86400)
+    hours = int((remaining_seconds % 86400) // 3600)
+    minutes = int((remaining_seconds % 3600) // 60)
+    
+    if days > 0:
+        if hours > 0:
+            return f"{days}d{hours}h"
+        else:
+            return f"{days}d"
+    elif hours > 0:
+        if minutes > 0:
+            return f"{hours}h{minutes}m"
+        else:
+            return f"{hours}h"
+    else:
+        return f"{minutes}m"
+
+def get_templates(token):
+    """Fetch templates from Coder API"""
+    url = "https://rcoder.sal.za.net/api/v2/templates"
+    headers = {
+        'Accept': 'application/json',
+        'Coder-Session-Token': token
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        # API returns a list directly, not an object with "templates" key
+        return response.json()
+    else:
+        print(f"Error fetching templates: {response.status_code}")
+        return []
+
+def get_workspace_details(token, workspace_id):
+    """Get workspace details including template_id, ttl_ms, deadline, and status"""
     url = f"https://rcoder.sal.za.net/api/v2/workspaces/{workspace_id}"
     headers = {
         'Accept': 'application/json',
@@ -37,12 +87,18 @@ def get_workspace_ttl(token, workspace_id):
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         data = response.json()
-        return data.get('ttl_ms', None)
+        return {
+            'ttl_ms': data.get('ttl_ms', None),
+            'template_id': data.get('template_id', None),
+            'deadline': data.get('latest_build', {}).get('deadline', None),
+            'status': data.get('latest_build', {}).get('status', None)
+        }
     else:
-        return None
+        return {'ttl_ms': None, 'template_id': None, 'deadline': None, 'status': None}
 
-def extract_workspace_activity(token,logs):
+def extract_workspace_activity(token, logs, template_map):
     workspace_activities = []
+    workspace_latest = {}  # Track the latest start time for each workspace
 
     for log in logs.get('audit_logs', []):
         # pprint.pprint(log)
@@ -57,19 +113,44 @@ def extract_workspace_activity(token,logs):
             workspace_id = log.get('additional_fields', {}).get('workspace_id', 'N/A')
 
             start_time = format_time(log.get('time', ''))
-            ttl_ms = get_workspace_ttl(token,workspace_id)
+            log_time = log.get('time', '')
+            
+            # Only keep the latest start event for each workspace
+            if workspace_id not in workspace_latest or log_time > workspace_latest[workspace_id]['log_time']:
+                workspace_details = get_workspace_details(token, workspace_id)
+                ttl_ms = workspace_details['ttl_ms']
+                template_id = workspace_details['template_id']
+                template_name = template_map.get(template_id, 'Unknown') if template_id else 'N/A'
+                
+                # Calculate until_stop time using workspace deadline (only for running workspaces)
+                until_stop = None
+                try:
+                    # Only show until_stop for currently running workspaces
+                    if workspace_details['status'] == 'running':
+                        deadline_str = workspace_details['deadline']
+                        if deadline_str:
+                            deadline_dt = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+                            now = datetime.now(timezone.utc)
+                            
+                            if deadline_dt > now:
+                                remaining_seconds = (deadline_dt - now).total_seconds()
+                                until_stop = format_time_remaining(remaining_seconds)
+                except Exception:
+                    until_stop = None
 
+                workspace_latest[workspace_id] = {
+                    'username': username,
+                    'workspace_name': workspace_name,
+                    'workspace_id': workspace_id,
+                    'start_time': start_time,
+                    'log_time': log_time,
+                    'ttl_ms': ttl_ms,
+                    'template_name': template_name,
+                    'until_stop': until_stop
+                }
 
-            workspace_activities.append({
-                'username': username,
-                'workspace_name': workspace_name,
-                'workspace_id': workspace_id,
-                'start_time': start_time,
-                'ttl_ms': ttl_ms
-
-            })
-
-    return workspace_activities
+    # Convert dictionary values to list
+    return list(workspace_latest.values())
 
 def update_workspace_ttl(token, workspace_id, ttl_ms):
     url = f"https://rcoder.sal.za.net/api/v2/workspaces/{workspace_id}/ttl"
@@ -91,8 +172,7 @@ def update_workspace_ttl(token, workspace_id, ttl_ms):
 
 def main():
     try:
-        with open('audit-token.txt', 'r') as f:
-            token = f.read().strip()
+        token = get_token()
 
         if len(sys.argv) == 4 and sys.argv[1] == '--set-ttl':
             workspace_id = sys.argv[2]
@@ -101,26 +181,30 @@ def main():
             return
 
         logs = get_audit_logs(token)
-        activities = extract_workspace_activity(token,logs)
+        templates = get_templates(token)
+        
+        # Create a dict to map template id to template name
+        template_map = {tpl['id']: tpl['name'] for tpl in templates}
+        
+        activities = extract_workspace_activity(token, logs, template_map)
 
         print("\nWorkspace Activity Report:")
-        print("-" * 135)
-        print(f"{'Username':<15} {'Workspace Name':<25} {'Workspace ID':<40} {'Start Time':<25} {'TTL (ms)':<15}")
-        print("-" * 135)
+        print("-" * 180)
+        print(f"{'Username':<15} {'Workspace Name':<25} {'Template':<20} {'Workspace ID':<40} {'Start Time':<25} {'TTL (ms)':<15} {'Until Stop':<10}")
+        print("-" * 180)
 
         for activity in activities:
+            until_stop_str = activity['until_stop'] if activity['until_stop'] else ''
             print(f"{activity['username'] or 'N/A':<15} "
                   f"{activity['workspace_name']:<25} "
+                  f"{activity['template_name']:<20} "
                   f"{activity['workspace_id']:<40} "
                   f"{activity['start_time']:<25} "
-                  f"{activity['ttl_ms'] if activity['ttl_ms'] is not None else 'N/A':<15}")
-
+                  f"{activity['ttl_ms'] if activity['ttl_ms'] is not None else 'N/A':<15} "
+                  f"{until_stop_str:<10}")
 
         print(f"\nTotal workspace start events found: {len(activities)}")
 
-    except FileNotFoundError:
-        print("Error: audit-token.txt file not found")
-        sys.exit(1)
     except json.JSONDecodeError:
         print("Error: Invalid JSON response from API")
         sys.exit(1)

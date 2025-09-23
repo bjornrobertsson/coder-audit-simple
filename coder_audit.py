@@ -3,6 +3,7 @@
 import requests
 import json
 import datetime
+from datetime import timezone, timedelta
 import os
 from tabulate import tabulate
 
@@ -77,16 +78,49 @@ def format_ttl(ms):
     if not ms:
         return "N/A"
     
-    seconds = ms / 1000000000
-    hours = seconds / 3600
+    seconds = ms / 1000  # Convert milliseconds to seconds
     
-    if hours < 1:
-        return f"{int(seconds)} seconds"
-    elif hours < 24:
-        return f"{int(hours)} hours"
-    else:
-        days = hours / 24
-        return f"{int(days)} days"
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    
+    minutes = seconds / 60
+    if minutes < 60:
+        return f"{int(minutes)}m"
+    
+    hours = minutes / 60
+    if hours < 24:
+        return f"{int(hours)}h"
+    
+    days = hours / 24
+    return f"{int(days)}d"
+
+def format_time_remaining(deadline):
+    """Format time remaining until workspace stops"""
+    if not deadline or deadline == "N/A":
+        return "N/A"
+    
+    try:
+        dt = datetime.datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+        now = datetime.datetime.now(timezone.utc)
+        remaining = dt - now
+        
+        if remaining.total_seconds() < 0:
+            return "Expired"
+        
+        days = remaining.days
+        hours, remainder = divmod(remaining.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        if days > 0:
+            return f"{days}d {hours}h"
+        elif hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m {seconds}s"
+        else:
+            return f"{seconds}s"
+    except:
+        return deadline
 
 def main():
     # Get data
@@ -110,8 +144,9 @@ def main():
             status = workspace['latest_build']['status']
             template_name = template_map.get(workspace['template_id'], 'Unknown')
             last_seen = format_date(workspace['owner'].get('last_seen_at', 'N/A') if 'owner' in workspace else workspace.get('last_used_at', 'N/A'))
-            ttl = format_ttl(workspace.get('ttl_ms'))
+            ttl_default = format_ttl(workspace.get('ttl_ms'))
             deadline = format_date(workspace['latest_build'].get('deadline', 'N/A'))
+            until_stop = format_time_remaining(workspace['latest_build'].get('deadline'))
             max_deadline = format_date(workspace['latest_build'].get('max_deadline', 'N/A'))
             
             table_data.append([
@@ -120,7 +155,8 @@ def main():
                 template_name,
                 status,
                 last_seen,
-                ttl,
+                ttl_default,
+                until_stop,
                 deadline,
                 max_deadline
             ])
@@ -129,7 +165,7 @@ def main():
     table_data.sort(key=lambda x: (x[0].lower(), x[1].lower()))
     
     # Display the table
-    headers = ["Username", "Workspace", "Template", "Status", "Last Seen", "TTL", "Deadline", "Max Deadline"]
+    headers = ["Username", "Workspace", "Template", "Status", "Last Seen", "TTL (Default)", "Until Stop", "Deadline", "Max Deadline"]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 if __name__ == "__main__":
