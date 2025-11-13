@@ -58,9 +58,27 @@ def format_date(date_str):
     except:
         return date_str
 
+def get_workspaces():
+    """Fetch workspaces from Coder API"""
+    url = f"{CODER_URL}/api/v2/workspaces"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()["workspaces"]
+    else:
+        print(f"Error fetching workspaces: {response.status_code}")
+        return []
+
 def main():
     audit_logs = get_audit_logs()
     users = get_users()
+    workspaces = get_workspaces()
+
+    workspace_templates = {
+        ws['name']: {
+            'template_name': ws.get('template_name'),
+            'template_display_name': ws.get('template_display_name')
+        } for ws in workspaces
+    }
     
     deleted_by_user = {user['username']: [] for user in users}
 
@@ -76,19 +94,25 @@ def main():
 
                 if workspace_name and user and time:
                     if user in deleted_by_user:
+                        template_info = workspace_templates.get(workspace_name, {
+                            'template_name': 'N/A',
+                            'template_display_name': 'N/A'
+                        })
                         deleted_by_user[user].append({
                             "name": workspace_name,
-                            "time": format_date(time)
+                            "time": format_date(time),
+                            "template_name": template_info['template_name'],
+                            "template_display_name": template_info['template_display_name']
                         })
 
-    print("Deleted workspaces by user:")
-    for user, workspaces in deleted_by_user.items():
-        print(f"\nUser: {user}")
-        if workspaces:
-            for ws in workspaces:
-                print(f"- {ws['name']} (at {ws['time']})")
-        else:
-            print("- No deleted workspaces found.")
+    has_deleted_workspaces = any(deleted_by_user.values())
+    if has_deleted_workspaces:
+        print("Deleted workspaces by user:")
+        for user, deleted_ws in deleted_by_user.items():
+            if deleted_ws:
+                print(f"\nUser: {user}")
+                for ws in deleted_ws:
+                    print(f"- {ws['name']} (at {ws['time']}) (Template: {ws['template_name']} - {ws['template_display_name']})")
 
 if __name__ == "__main__":
     main()
