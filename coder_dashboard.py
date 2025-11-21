@@ -35,7 +35,7 @@ def get_fqdn():
     return "FQDN"
 
 FQDN = get_fqdn()
-CODER_URL = f"https://{FQDN}"
+CODER_URL = f"{FQDN}"
 TOKEN = get_token()
 
 headers = {

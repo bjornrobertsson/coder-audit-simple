@@ -6,11 +6,19 @@ from datetime import datetime
 import os
 from tabulate import tabulate
 
-FQDN="My URL"
+import argparse
+
 # Add audit-token.txt or manually in this script
 
-def get_audit_logs(token, url=f"https://{FQDN}/api/v2/audit", limit=0):
+def get_fqdn():
+    if os.environ.get("CODER_URL"):
+      return os.environ.get("CODER_URL")
+    print("Use CODER_URL ENV to pass your FQDN")
+    return "FQDN"
+
+def get_audit_logs(token, coder_url, limit=0):
     """Fetch audit logs from the Coder API"""
+    url = f"{coder_url}/api/v2/audit"
     headers = {
         'Accept': 'application/json',
         'Coder-Session-Token': token
@@ -83,6 +91,12 @@ def process_audit_logs(logs):
     return results
 
 def main():
+    parser = argparse.ArgumentParser(description="Monitor user last seen times from Coder audit logs.")
+    parser.add_argument('--deployment', type=str, help='The Coder deployment URL.')
+    args = parser.parse_args()
+
+    coder_url = args.deployment if args.deployment else get_fqdn()
+
     # Get the token from file
     try:
         with open("audit-token.txt", "r") as f:
@@ -92,7 +106,7 @@ def main():
         sys.exit(1)
     
     # Fetch the audit logs
-    logs = get_audit_logs(token)
+    logs = get_audit_logs(token, coder_url)
     
     # Process the logs
     results = process_audit_logs(logs)

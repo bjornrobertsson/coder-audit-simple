@@ -204,14 +204,14 @@ Examples:
                        help='Show system events (like reboot in last)')
     parser.add_argument('--url', default='http://localhost:7080',
                        help='Coder deployment URL (default: http://localhost:7080)')
-    parser.add_argument('--token', help='Coder session token (or set CODER_SESSION_TOKEN)')
+    parser.add_argument('--token', help='Coder session token (or set CODER_TOKEN)')
     
     args = parser.parse_args()
     
     # Get token from args or environment
-    token = args.token or os.environ.get('CODER_SESSION_TOKEN')
+    token = args.token or os.environ.get('CODER_TOKEN')
     if not token:
-        print("Error: Coder session token required. Use --token or set CODER_SESSION_TOKEN", 
+        print("Error: Coder session token required. Use --token or set CODER_TOKEN", 
               file=sys.stderr)
         sys.exit(1)
     

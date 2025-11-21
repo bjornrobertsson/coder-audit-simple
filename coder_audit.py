@@ -24,7 +24,7 @@ def get_fqdn():
 FQDN = get_fqdn()
 # FQDN="My URL"
 # Add your token to audit-token.txt or update here
-CODER_URL = f"https://{FQDN}"
+CODER_URL = f"{FQDN}"
 TOKEN = get_token()
 
 headers = {
