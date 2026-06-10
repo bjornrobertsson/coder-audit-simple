@@ -36,6 +36,17 @@ Output signals:
 
 Analyses a HAR file recorded from browser DevTools during a session timeout event.
 
+### correlate.py
+
+Cross-references session_monitor.py JSONL output with HAR 401 events to confirm both sources observed the same session loss.
+
+```bash
+python session/correlate.py --jsonl session_monitor.jsonl --har capture.har
+python session/correlate.py --jsonl my.jsonl --har my.har --window-seconds 30
+```
+
+Output includes a verdict on whether the script and browser observations align.
+
 ```bash
 # Record HAR in browser:
 # 1. Open DevTools → Network tab
